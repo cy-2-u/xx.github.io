@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI聊天助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2196F3',
+                        secondary: '#4CAF50',
+                        neutral: '#F5F5F5',
+                        dark: '#212121',
+                        light: '#FFFFFF',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .scrollbar-thin {
+                scrollbar-width: thin;
+            }
+            .scrollbar-thumb-rounded {
+                scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+            }
+            .chat-bubble-user {
+                @apply bg-primary text-white rounded-tl-2xl rounded-tr-none rounded-br-2xl rounded-bl-2xl;
+            }
+            .chat-bubble-ai {
+                @apply bg-neutral text-dark rounded-tl-none rounded-tr-2xl rounded-br-2xl rounded-bl-2xl;
+            }
+            .hover-scale {
+                @apply transition-transform duration-300 hover:scale-105;
+            }
+            .sidebar-closed {
+                @apply -translate-x-full md:w-0;
+            }
+            .sidebar-open {
+                @apply translate-x-0 md:w-80 lg:w-96;
+            }
+            .main-expanded {
+                @apply md:ml-0;
+            }
+            .main-contracted {
+                @apply md:ml-80 lg:ml-96;
+            }
+            .sidebar-toggle-rotate {
+                @apply transform rotate-180;
+            }
+            .mobile-sidebar-backdrop {
+                @apply fixed inset-0 bg-black/50 z-10 hidden md:hidden;
+            }
+            .mobile-chat-header {
+                @apply md:hidden bg-white sticky top-0 z-10 p-4 border-b border-gray-200;
+            }
+            .mobile-sidebar-header {
+                @apply md:hidden flex justify-between items-center mb-4;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-dark min-h-screen flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <button id="sidebar-toggle" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-bars text-gray-600"></i>
+                </button>
+                <div class="flex items-center space-x-2">
+                    <i class="fa fa-comment text-primary text-2xl"></i>
+                    <h1 class="text-xl font-bold text-dark">AI聊天助手</h1>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-moon-o text-gray-600"></i>
+                </button>
+                <button id="settings-btn" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-cog text-gray-600"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 移动端侧边栏遮罩 -->
+    <div id="mobile-sidebar-backdrop" class="mobile-sidebar-backdrop" onclick="toggleSidebar()"></div>
+
+    <!-- 主内容区 -->
+    <main class="flex-1 flex transition-all duration-300">
+        <!-- 左侧边栏 - 对话历史和模型选择 -->
+        <aside id="sidebar" class="fixed md:relative top-0 left-0 h-screen z-20 bg-white shadow-sm sidebar-open transition-all duration-300 overflow-hidden flex flex-col">
+            <!-- 移动端侧边栏头部 -->
+            <div class="mobile-sidebar-header p-5">
+                <h2 class="text-lg font-semibold flex items-center">
+                    <i class="fa fa-list-ul text-primary mr-2"></i>菜单
+                </h2>
+                <button class="p-2 rounded-full hover:bg-gray-100 transition-colors md:hidden" onclick="toggleSidebar()">
+                    <i class="fa fa-times text-gray-600"></i>
+                </button>
+            </div>
+
+            <!-- 模型选择区域 -->
+            <div class="w-full md:w-auto p-5">
+                <h2 class="text-lg font-semibold mb-4 flex items-center md:hidden">
+                    <i class="fa fa-microchip text-primary mr-2"></i>选择AI模型
+                </h2>
+                <div class="mb-4">
+                    <select id="model-selector" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all">
+                        <option value="google/gemini-2.0-flash-exp:free">google/gemini-2.0-flash-exp:free</option>
+                        <option value="deepseek/deepseek-chat-v3-0324:free">deepseek/deepseek-chat-v3-0324:free</option>
+                        <option value="deepseek/deepseek-r1-0528:free">deepseek/deepseek-r1-0528:free</option>
+                        <option value="deepseek/deepseek-r1:free">deepseek/deepseek-r1:free</option>
+                        <option value="tngtech/deepseek-r1t-chimera:free">tngtech/deepseek-r1t-chimera:free</option>
+                    </select>
+                </div>
+                <button id="add-model-btn" class="w-full py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center">
+                    <i class="fa fa-plus mr-2"></i>添加模型
+                </button>
+            </div>
+
+            <!-- 对话历史区域 -->
+            <div class="w-full md:w-auto p-5 flex-1 overflow-hidden flex flex-col">
+                <h2 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fa fa-history text-primary mr-2"></i>对话历史
+                </h2>
+                <div id="history-list" class="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded space-y-2">
+                    <!-- 历史记录会动态加载到这里 -->
+                </div>
+                <button id="clear-history-btn" class="mt-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+                    清空历史
+                </button>
+            </div>
+        </aside>
+
+        <!-- 右侧聊天区域 -->
+        <section id="main-content" class="flex-1 flex flex-col bg-white rounded-xl shadow-sm overflow-hidden main-contracted transition-all duration-300">
+            <!-- 移动端聊天头部 -->
+            <div class="mobile-chat-header">
+                <div id="current-model-info" class="flex items-center">
+                    <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                        <i class="fa fa-robot"></i>
+                    </div>
+                    <div class="ml-3">
+                        <h3 id="current-model-name" class="font-semibold">google/gemini-2.0-flash-exp:free</h3>
+                        <p id="model-status" class="text-sm text-gray-500">在线</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 聊天内容区域 -->
+            <div id="chat-container" class="flex-1 p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-rounded space-y-6">
+                <!-- 欢迎消息 -->
+                <div class="flex items-start">
+                    <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                        <i class="fa fa-robot"></i>
+                    </div>
+                    <div class="ml-3 max-w-[90%]">
+                        <div class="chat-bubble-ai p-4 shadow-sm">
+                            <p>你好！我是AI助手，有什么可以帮助你的吗？</p>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">google/gemini-2.0-flash-exp:free</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="p-4 border-t border-gray-200">
+                <div class="flex items-end gap-3">
+                    <textarea id="user-input" rows="3" placeholder="输入消息..." class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all resize-none"></textarea>
+                    <button id="send-btn" class="bg-primary text-white p-3 rounded-lg hover:bg-primary/90 transition-colors hover-scale">
+                        <i class="fa fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="flex justify-between mt-3 text-xs text-gray-500">
+                    <div id="char-count">0/2000</div>
+                    <div>支持Markdown语法</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 添加模型模态框 -->
+    <div id="add-model-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-6 transform transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">添加新模型</h3>
+                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <form id="add-model-form">
+                <div class="mb-4">
+                    <label for="new-model-name" class="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
+                    <input type="text" id="new-model-name" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" placeholder="例如: google/gemini-2.0-flash-exp:free">
+                </div>
+                <div class="mb-4">
+                    <label for="new-api-key" class="block text-sm font-medium text-gray-700 mb-1">API密钥</label>
+                    <input type="text" id="new-api-key" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all" placeholder="例如: sk-or-v1-xxxxxx">
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancel-add-model" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">添加</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-6 transform transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">设置</h3>
+                <button id="close-settings-btn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">主题</label>
+                    <div class="flex space-x-3">
+                        <button class="theme-option px-4 py-2 border-2 border-primary bg-primary/10 rounded-lg" data-theme="light">浅色</button>
+                        <button class="theme-option px-4 py-2 border-2 border-gray-300 rounded-lg" data-theme="dark">深色</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="flex items-center">
+                        <input type="checkbox" id="auto-save" class="mr-2" checked>
+                        <span class="text-sm">自动保存对话历史</span>
+                    </label>
+                </div>
+                <div>
+                    <label class="flex items-center">
+                        <input type="checkbox" id="markdown-preview" class="mr-2" checked>
+                        <span class="text-sm">Markdown预览</span>
+                    </label>
+                </div>
+                <div>
+                    <label class="flex items-center">
+                        <input type="checkbox" id="sidebar-expanded" class="mr-2" checked>
+                        <span class="text-sm">默认展开侧边栏</span>
+                    </label>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button id="save-settings-btn" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化API密钥映射
+        const apiKeyMap = {
+            "google/gemini-2.0-flash-exp:free": "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",
+            "deepseek/deepseek-chat-v3-0324:free": "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",
+            "deepseek/deepseek-r1-0528:free": "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",
+            "deepseek/deepseek-r1:free": "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",
+            "tngtech/deepseek-r1t-chimera:free": "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"
+        };
+
+        // DOM元素
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const charCount = document.getElementById('char-count');
+        const modelSelector = document.getElementById('model-selector');
+        const currentModelName = document.getElementById('current-model-name');
+        const historyList = document.getElementById('history-list');
+        const addModelBtn = document.getElementById('add-model-btn');
+        const addModelModal = document.getElementById('add-model-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const cancelAddModel = document.getElementById('cancel-add-model');
+        const addModelForm = document.getElementById('add-model-form');
+        const newModelName = document.getElementById('new-model-name');
+        const newApiKey = document.getElementById('new-api-key');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeSettingsBtn = document.getElementById('close-settings-btn');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+        const themeToggle = document.getElementById('theme-toggle');
+        const autoSaveCheckbox = document.getElementById('auto-save');
+        const markdownPreviewCheckbox = document.getElementById('markdown-preview');
+        const themeOptions = document.querySelectorAll('.theme-option');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('main-content');
+        const sidebarExpandedCheckbox = document.getElementById('sidebar-expanded');
+        const mobileSidebarBackdrop = document.getElementById('mobile-sidebar-backdrop');
+
+        // 当前会话ID
+        let currentSessionId = generateSessionId();
+        let isWaitingForResponse = false;
+        let sidebarExpanded = true;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModelsFromLocalStorage();
+            loadHistoryFromLocalStorage();
+            loadSettingsFromLocalStorage();
+            updateCharCount();
+            updateCurrentModelInfo();
+            setupSidebar();
+            
+            // 添加示例历史记录
+            addExampleHistoryItems();
+            
+            // 移动端适配
+            handleMobileLayout();
+            window.addEventListener('resize', handleMobileLayout);
+        });
+
+        // 生成唯一会话ID
+        function generateSessionId() {
+            return 'session-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+        }
+
+        // 加载本地存储的模型
+        function loadModelsFromLocalStorage() {
+            const savedModels = localStorage.getItem('customModels');
+            if (savedModels) {
+                const models = JSON.parse(savedModels);
+                models.forEach(model => {
+                    if (!apiKeyMap[model.name]) {
+                        apiKeyMap[model.name] = model.apiKey;
+                        const option = document.createElement('option');
+                        option.value = model.name;
+                        option.textContent = model.name;
+                        modelSelector.appendChild(option);
+                    }
+                });
+            }
+        }
+
+        // 加载本地存储的历史记录
+        function loadHistoryFromLocalStorage() {
+            const histories = JSON.parse(localStorage.getItem('chatHistories') || '[]');
+            historyList.innerHTML = '';
+            
+            if (histories.length === 0) {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'text-center py-8 text-gray-500';
+                emptyState.innerHTML = '<i class="fa fa-folder-open-o text-3xl mb-2"></i><p>暂无对话历史</p>';
+                historyList.appendChild(emptyState);
+                return;
+            }
+            
+            histories.forEach(history => {
+                const historyItem = createHistoryItem(history);
+                historyList.appendChild(historyItem);
+            });
+        }
+
+        // 创建历史记录项
+        function createHistoryItem(history) {
+            const item = document.createElement('div');
+            item.className = 'p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors';
+            item.dataset.sessionId = history.sessionId;
+            
+            const date = new Date(history.timestamp);
+            const formattedDate = date.toLocaleString();
+            
+            item.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h4 class="font-medium truncate">${history.model}</h4>
+                        <p class="text-sm text-gray-500 mt-1 truncate">${history.lastMessage}</p>
+                    </div>
+                    <span class="text-xs text-gray-400">${formattedDate}</span>
+                </div>
+            `;
+            
+            item.addEventListener('click', () => {
+                loadChatHistory(history.sessionId);
+                // 在移动设备上点击历史记录后关闭侧边栏
+                if (window.innerWidth < 768) {
+                    toggleSidebar();
+                }
+            });
+            
+            return item;
+        }
+
+        // 添加示例历史记录
+        function addExampleHistoryItems() {
+            if (JSON.parse(localStorage.getItem('chatHistories') || '[]').length > 0) {
+                return; // 已有历史记录，不添加示例
+            }
+            
+            const exampleHistories = [
+                {
+                    sessionId: 'example-session-1',
+                    model: 'google/gemini-2.0-flash-exp:free',
+                    lastMessage: '你能帮我解释一下量子计算的基本原理吗？',
+                    timestamp: Date.now() - 86400000 // 1天前
+                },
+                {
+                    sessionId: 'example-session-2',
+                    model: 'deepseek/deepseek-r1:free',
+                    lastMessage: '请帮我生成一个简单的Python爬虫程序',
+                    timestamp: Date.now() - 172800000 // 2天前
+                }
+            ];
+            
+            exampleHistories.forEach(history => {
+                const historyItem = createHistoryItem(history);
+                historyList.appendChild(historyItem);
+            });
+        }
+
+        // 加载聊天历史
+        function loadChatHistory(sessionId) {
+            currentSessionId = sessionId;
+            chatContainer.innerHTML = '';
+            
+            const histories = JSON.parse(localStorage.getItem('chatHistories') || '[]');
+            const history = histories.find(h => h.sessionId === sessionId);
+            
+            if (history && history.messages) {
+                history.messages.forEach(msg => {
+                    appendMessageToChat(msg.content, msg.role, msg.model);
+                });
+                
+                // 更新当前模型选择器
+                const modelOption = modelSelector.querySelector(`option[value="${history.model}"]`);
+                if (modelOption) {
+                    modelSelector.value = history.model;
+                    updateCurrentModelInfo();
+                }
+            }
+            
+            // 滚动到底部
+            scrollToBottom();
+        }
+
+        // 更新当前模型信息
+        function updateCurrentModelInfo() {
+            const selectedModel = modelSelector.value;
+            currentModelName.textContent = selectedModel;
+        }
+
+        // 保存设置到本地存储
+        function saveSettingsToLocalStorage() {
+            const settings = {
+                theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+                autoSave: autoSaveCheckbox.checked,
+                markdownPreview: markdownPreviewCheckbox.checked,
+                sidebarExpanded: sidebarExpandedCheckbox.checked
+            };
+            
+            localStorage.setItem('chatSettings', JSON.stringify(settings));
+        }
+
+        // 从本地存储加载设置
+        function loadSettingsFromLocalStorage() {
+            const settings = JSON.parse(localStorage.getItem('chatSettings') || '{}');
+            
+            // 主题设置
+            if (settings.theme === 'dark') {
+                document.documentElement.classList.add('dark');
+                themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-400"></i>';
+                themeOptions[0].classList.remove('border-primary', 'bg-primary/10');
+                themeOptions[0].classList.add('border-gray-300');
+                themeOptions[1].classList.remove('border-gray-300');
+                themeOptions[1].classList.add('border-primary', 'bg-primary/10');
+            } else {
+                document.documentElement.classList.remove('dark');
+                themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600"></i>';
+                themeOptions[1].classList.remove('border-primary', 'bg-primary/10');
+                themeOptions[1].classList.add('border-gray-300');
+                themeOptions[0].classList.remove('border-gray-300');
+                themeOptions[0].classList.add('border-primary', 'bg-primary/10');
+            }
+            
+            // 自动保存设置
+            autoSaveCheckbox.checked = settings.autoSave !== undefined ? settings.autoSave : true;
+            
+            // Markdown预览设置
+            markdownPreviewCheckbox.checked = settings.markdownPreview !== undefined ? settings.markdownPreview : true;
+            
+            // 侧边栏设置
+            sidebarExpanded = settings.sidebarExpanded !== undefined ? settings.sidebarExpanded : true;
+            sidebarExpandedCheckbox.checked = sidebarExpanded;
+        }
+
+        // 设置侧边栏状态
+        function setupSidebar() {
+            // 在移动设备上默认不展开侧边栏
+            if (window.innerWidth < 768) {
+                sidebarExpanded = false;
+                sidebarExpandedCheckbox.checked = false;
+                collapseSidebar();
+            } else {
+                if (sidebarExpanded) {
+                    expandSidebar();
+                } else {
+                    collapseSidebar();
+                }
+            }
+        }
+
+        // 处理移动布局
+        function handleMobileLayout() {
+            if (window.innerWidth < 768) {
+                // 移动设备
+                if (sidebarExpanded) {
+                    mobileSidebarBackdrop.classList.remove('hidden');
+                } else {
+                    mobileSidebarBackdrop.classList.add('hidden');
+                }
+            } else {
+                // 桌面设备
+                mobileSidebarBackdrop.classList.add('hidden');
+            }
+        }
+
+        // 展开侧边栏
+        function expandSidebar() {
+            sidebar.classList.remove('sidebar-closed');
+            sidebar.classList.add('sidebar-open');
+            mainContent.classList.remove('main-expanded');
+            mainContent.classList.add('main-contracted');
+            sidebarToggle.querySelector('i').classList.remove('fa-bars');
+            sidebarToggle.querySelector('i').classList.add('fa-times');
+            sidebarExpanded = true;
+            saveSettingsToLocalStorage();
+            
+            // 显示遮罩层（仅在移动设备上）
+            if (window.innerWidth < 768) {
+                mobileSidebarBackdrop.classList.remove('hidden');
+            }
+        }
+
+        // 折叠侧边栏
+        function collapseSidebar() {
+            sidebar.classList.remove('sidebar-open');
+            sidebar.classList.add('sidebar-closed');
+            mainContent.classList.remove('main-contracted');
+            mainContent.classList.add('main-expanded');
+            sidebarToggle.querySelector('i').classList.remove('fa-times');
+            sidebarToggle.querySelector('i').classList.add('fa-bars');
+            sidebarExpanded = false;
+            saveSettingsToLocalStorage();
+            
+            // 隐藏遮罩层
+            mobileSidebarBackdrop.classList.add('hidden');
+        }
+
+        // 切换侧边栏状态
+        function toggleSidebar() {
+            if (sidebarExpanded) {
+                collapseSidebar();
+            } else {
+                expandSidebar();
+            }
+        }
+
+        // 更新字符计数
+        function updateCharCount() {
+            const count = userInput.value.length;
+            charCount.textContent = `${count}/2000`;
+            
+            if (count > 1500) {
+                charCount.classList.add('text-yellow-500');
+                if (count > 2000) {
+                    charCount.classList.add('text-red-500');
+                } else {
+                    charCount.classList.remove('text-red-500');
+                }
+            } else {
+                charCount.classList.remove('text-yellow-500', 'text-red-500');
+            }
+        }
+
+        // 滚动到底部
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 添加消息到聊天界面
+        function appendMessageToChat(content, role, model = null) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = role === 'user' ? 'flex items-start justify-end' : 'flex items-start';
+            
+            // 处理Markdown格式
+            let formattedContent = content;
+            // 处理标题
+            formattedContent = formattedContent.replace(/#+\s+(.*$)/gm, '<h3 class="font-bold text-lg mb-2">$1</h3>');
+            // 处理粗体
+            formattedContent = formattedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // 处理斜体
+            formattedContent = formattedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // 处理代码块
+            formattedContent = formattedContent.replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-100 p-3 rounded my-2 overflow-x-auto"><code>$1</code></pre>');
+            // 处理单行代码
+            formattedContent = formattedContent.replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded">$1</code>');
+            // 处理链接
+            formattedContent = formattedContent.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-primary hover:underline">$1</a>');
+            // 处理列表
+            formattedContent = formattedContent.replace(/^\s*-\s+(.*$)/gm, '<li class="list-disc ml-5 my-1">$1</li>');
+            formattedContent = `<ul>${formattedContent}</ul>`;
+            // 处理换行
+            formattedContent = formattedContent.replace(/\n/g, '<br>');
+            
+            const avatarClass = role === 'user' ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-600';
+            const avatarIcon = role === 'user' ? 'fa-user' : 'fa-robot';
+            const bubbleClass = role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai';
+            
+            messageDiv.innerHTML = `
+                ${role === 'user' ? '' : `
+                    <div class="w-8 h-8 rounded-full ${avatarClass} flex items-center justify-center shrink-0">
+                        <i class="fa ${avatarIcon}"></i>
+                    </div>
+                `}
+                <div class="${role === 'user' ? 'ml-0 mr-3' : 'ml-3'} max-w-[90%]">
+                    <div class="${bubbleClass} p-4 shadow-sm">
+                        ${formattedContent}
+                    </div>
+                    ${model ? `<div class="text-xs text-gray-500 mt-1">${model}</div>` : ''}
+                </div>
+                ${role === 'user' ? `
+                    <div class="w-8 h-8 rounded-full ${avatarClass} flex items-center justify-center shrink-0">
+                        <i class="fa ${avatarIcon}"></i>
+                    </div>
+                ` : ''}
+            `;
+            
+            chatContainer.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // 保存聊天历史到本地存储
+        function saveChatHistory() {
+            if (!autoSaveCheckbox.checked) return;
+            
+            const messages = Array.from(chatContainer.children).map(child => {
+                const role = child.classList.contains('justify-end') ? 'user' : 'assistant';
+                const content = child.querySelector('.chat-bubble-user, .chat-bubble-ai').innerHTML;
+                const modelEl = child.querySelector('.text-gray-500');
+                const model = modelEl ? modelEl.textContent : null;
+                
+                return {
+                    role,
+                    content,
+                    model
+                };
+            });
+            
+            const lastMessage = messages.length > 0 ? 
+                messages[messages.length - 1].content.replace(/<[^>]+>/g, '').substring(0, 50) + '...' : 
+                '新对话';
+            
+            const histories = JSON.parse(localStorage.getItem('chatHistories') || '[]');
+            const existingIndex = histories.findIndex(h => h.sessionId === currentSessionId);
+            
+            const historyItem = {
+                sessionId: currentSessionId,
+                model: modelSelector.value,
+                lastMessage,
+                timestamp: Date.now(),
+                messages
+            };
+            
+            if (existingIndex !== -1) {
+                histories[existingIndex] = historyItem;
+            } else {
+                histories.push(historyItem);
+            }
+            
+            localStorage.setItem('chatHistories', JSON.stringify(histories));
+            loadHistoryFromLocalStorage();
+        }
+
+        // 发送消息到API
+        async function sendMessageToAPI(message) {
+            const selectedModel = modelSelector.value;
+            const apiKey = apiKeyMap[selectedModel];
+            
+            if (!apiKey) {
+                alert('未找到该模型的API密钥！');
+                return;
+            }
+            
+            try {
+                // 显示加载状态
+                appendMessageToChat('<div class="animate-pulse">思考中...</div>', 'assistant', selectedModel);
+                
+                // 获取历史消息
+                const messages = Array.from(chatContainer.children).map(child => {
+                    const role = child.classList.contains('justify-end') ? 'user' : 'assistant';
+                    const content = child.querySelector('.chat-bubble-user, .chat-bubble-ai').innerHTML.replace(/<[^>]+>/g, '');
+                    return { role, content };
+                });
+                
+                // 移除加载状态
+                chatContainer.removeChild(chatContainer.lastChild);
+                
+                // 模拟API响应延迟
+                setTimeout(() => {
+                    // 显示AI回复
+                    const aiResponse = "这是一个模拟的AI回复。在实际应用中，这里会调用真正的API并获取回复。\n\n**支持的功能：**\n- 模型切换\n- 对话历史\n- Markdown格式\n- 浅色/深色主题";
+                    appendMessageToChat(aiResponse, 'assistant', selectedModel);
+                    
+                    // 保存聊天历史
+                    saveChatHistory();
+                    
+                    isWaitingForResponse = false;
+                    updateUIState();
+                }, 1500);
+                
+                /* 真实API调用代码
+                // 构建API请求
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'HTTP-Referer': 'http://localhost:8088',
+                        'X-Title': 'test'
+                    },
+                    body: JSON.stringify({
+                        model: selectedModel,
+                        messages: [
+                            { role: 'system', content: 'You are an AI assistant that helps people find information.' },
+                            ...messages,
+                            { role: 'user', content: message }
+                        ],
+                        max_tokens: 2048
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // 移除加载状态
+                chatContainer.removeChild(chatContainer.lastChild);
+                
+                // 显示AI回复
+                const aiResponse = data.choices[0].message.content;
+                appendMessageToChat(aiResponse, 'assistant', selectedModel);
+                
+                // 保存聊天历史
+                saveChatHistory();
+                
+                isWaitingForResponse = false;
+                updateUIState();
+                */
+            } catch (error) {
+                console.error('API请求错误:', error);
+                
+                // 移除加载状态
+                chatContainer.removeChild(chatContainer.lastChild);
+                
+                // 显示错误消息
+                appendMessageToChat(`<div class="text-red-500">发生错误: ${error.message}</div>`, 'assistant', selectedModel);
+                
+                isWaitingForResponse = false;
+                updateUIState();
+            }
+        }
+
+        // 更新UI状态
+        function updateUIState() {
+            if (isWaitingForResponse) {
+                sendBtn.disabled = true;
+                sendBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                userInput.disabled = true;
+                userInput.classList.add('opacity-50', 'cursor-not-allowed');
+                modelSelector.disabled = true;
+                modelSelector.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                sendBtn.disabled = false;
+                sendBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                userInput.disabled = false;
+                userInput.classList.remove('opacity-50', 'cursor-not-allowed');
+                modelSelector.disabled = false;
+                modelSelector.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        // 发送消息
+        function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message || isWaitingForResponse) return;
+            
+            // 清空输入框
+            userInput.value = '';
+            updateCharCount();
+            
+            // 添加用户消息到聊天界面
+            appendMessageToChat(message, 'user', modelSelector.value);
+            
+            // 保存聊天历史
+            saveChatHistory();
+            
+            // 发送消息到API
+            isWaitingForResponse = true;
+            updateUIState();
+            sendMessageToAPI(message);
+        }
+
+        // 事件监听器
+        sendBtn.addEventListener('click', sendMessage);
+        
+        userInput.addEventListener('input', updateCharCount);
+        
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        modelSelector.addEventListener('change', () => {
+            updateCurrentModelInfo();
+            // 创建新会话
+            currentSessionId = generateSessionId();
+            chatContainer.innerHTML = '';
+        });
+        
+        addModelBtn.addEventListener('click', () => {
+            addModelModal.classList.remove('hidden');
+            newModelName.focus();
+        });
+        
+        closeModalBtn.addEventListener('click', () => {
+            addModelModal.classList.add('hidden');
+            newModelName.value = '';
+            newApiKey.value = '';
+        });
+        
+        cancelAddModel.addEventListener('click', () => {
+            addModelModal.classList.add('hidden');
+            newModelName.value = '';
+            newApiKey.value = '';
+        });
+        
+        addModelForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const modelName = newModelName.value.trim();
+            const apiKey = newApiKey.value.trim();
+            
+            if (!modelName || !apiKey) {
+                alert('请填写模型名称和API密钥！');
+                return;
+            }
+            
+            // 添加到API密钥映射
+            apiKeyMap[modelName] = apiKey;
+            
+            // 添加到选择器
+            const option = document.createElement('option');
+            option.value = modelName;
+            option.textContent = modelName;
+            modelSelector.appendChild(option);
+            modelSelector.value = modelName;
+            
+            // 保存到本地存储
+            const customModels = JSON.parse(localStorage.getItem('customModels') || '[]');
+            customModels.push({ name: modelName, apiKey });
+            localStorage.setItem('customModels', JSON.stringify(customModels));
+            
+            // 更新当前模型信息
+            updateCurrentModelInfo();
+            
+            // 关闭模态框
+            addModelModal.classList.add('hidden');
+            newModelName.value = '';
+            newApiKey.value = '';
+            
+            // 创建新会话
+            currentSessionId = generateSessionId();
+            chatContainer.innerHTML = '';
+        });
+        
+        clearHistoryBtn.addEventListener('click', () => {
+            if (confirm('确定要清空所有对话历史吗？此操作不可撤销。')) {
+                localStorage.removeItem('chatHistories');
+                loadHistoryFromLocalStorage();
+            }
+        });
+        
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.classList.remove('hidden');
+        });
+        
+        closeSettingsBtn.addEventListener('click', () => {
+            settingsModal.classList.add('hidden');
+        });
+        
+        saveSettingsBtn.addEventListener('click', () => {
+            saveSettingsToLocalStorage();
+            settingsModal.classList.add('hidden');
+        });
+        
+        themeToggle.addEventListener('click', () => {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600"></i>';
+                themeOptions[1].classList.remove('border-primary', 'bg-primary/10');
+                themeOptions[1].classList.add('border-gray-300');
+                themeOptions[0].classList.remove('border-gray-300');
+                themeOptions[0].classList.add('border-primary', 'bg-primary/10');
+            } else {
+                document.documentElement.classList.add('dark');
+                themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-400"></i>';
+                themeOptions[0].classList.remove('border-primary', 'bg-primary/10');
+                themeOptions[0].classList.add('border-gray-300');
+                themeOptions[1].classList.remove('border-gray-300');
+                themeOptions[1].classList.add('border-primary', 'bg-primary/10');
+            }
+            
+            saveSettingsToLocalStorage();
+        });
+        
+        themeOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                themeOptions.forEach(opt => {
+                    opt.classList.remove('border-primary', 'bg-primary/10');
+                    opt.classList.add('border-gray-300');
+                });
+                
+                option.classList.remove('border-gray-300');
+                option.classList.add('border-primary', 'bg-primary/10');
+                
+                if (option.dataset.theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                    themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-400"></i>';
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600"></i>';
+                }
+                
+                saveSettingsToLocalStorage();
+            });
+        });
+        
+        autoSaveCheckbox.addEventListener('change', saveSettingsToLocalStorage);
+        markdownPreviewCheckbox.addEventListener('change', saveSettingsToLocalStorage);
+        sidebarExpandedCheckbox.addEventListener('change', () => {
+            if (sidebarExpandedCheckbox.checked) {
+                expandSidebar();
+            } else {
+                collapseSidebar();
+            }
+        });
+        
+        sidebarToggle.addEventListener('click', toggleSidebar);
+    </script>
+</body>
+</html>
+    
